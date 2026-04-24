@@ -1174,7 +1174,7 @@ Units: calories=kcal, protein/carbs/fat/fiber/sugar/saturatedFat=grams, sodium/c
     });
     const data = await resp.json();
     const text = data.content.map(b=>b.text||'').join('');
-    const result = JSON.parse(text.replace(/```json|```/g,'').trim());
+    const result = extractJSON(text);
     editPendingNutrition = result;
 
     document.getElementById('editSpinner').style.display = 'none';
@@ -1465,7 +1465,7 @@ Units: calories=kcal, protein/carbs/fat/fiber/sugar/saturatedFat=grams, sodium/c
     const data = await resp.json();
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     const text = data.content.map(b=>b.text||'').join('');
-    const result = JSON.parse(text.replace(/```json|```/g,'').trim());
+    const result = extractJSON(text);
     pendingNutrition = result;
     currentImageBase64 = null;
     document.getElementById('textAnalyzingWrap').style.display = 'none';
@@ -1628,6 +1628,22 @@ function handleFile(e) {
   });
 }
 
+// Robust JSON extractor — handles extra text before/after JSON
+function extractJSON(text) {
+  // Try direct parse first
+  try { return JSON.parse(text.trim()); } catch(e) {}
+  // Strip markdown fences
+  const stripped = text.replace(/```json|```/g, '').trim();
+  try { return JSON.parse(stripped); } catch(e) {}
+  // Find the first { and last } and extract
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start !== -1 && end !== -1 && end > start) {
+    try { return JSON.parse(text.slice(start, end + 1)); } catch(e) {}
+  }
+  throw new Error('Could not parse nutrition data from response');
+}
+
 function analyzeWithDescription() {
   if (currentImages.length === 0) return;
   document.getElementById('descriptionSection').style.display = 'none';
@@ -1729,7 +1745,7 @@ Units: calories=kcal, protein/carbs/fat/fiber/sugar/saturatedFat=grams, sodium/c
     const data = await resp.json();
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     const text = data.content.map(b=>b.text||'').join('');
-    const result = JSON.parse(text.replace(/```json|```/g,'').trim());
+    const result = extractJSON(text);
     currentImageBase64 = images[0].base64;
     currentImageMediaType = images[0].mediaType;
     pendingNutrition = result;
