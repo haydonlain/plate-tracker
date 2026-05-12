@@ -1453,16 +1453,25 @@ Return exactly this JSON:
 Units: calories=kcal, protein/carbs/fat/fiber/sugar/saturatedFat=grams, sodium/cholesterol/potassium/calcium/iron/vitaminC=milligrams.`;
 
   try {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        messages: [{ role:"user", content: prompt }]
-      })
-    });
-    const data = await resp.json();
+    let data, attempts = 0;
+    while (attempts < 3) {
+      attempts++;
+      if (attempts > 1) await new Promise(r => setTimeout(r, 3000 * attempts));
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1000,
+          messages: [{ role:"user", content: prompt }]
+        })
+      });
+      data = await resp.json();
+      if (data.error && (data.error.type === 'overloaded_error' || (data.error.message||'').includes('overload'))) {
+        if (attempts < 3) continue;
+      }
+      break;
+    }
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     const text = data.content.map(b=>b.text||'').join('');
     const result = extractJSON(text);
@@ -1733,16 +1742,29 @@ Units: calories=kcal, protein/carbs/fat/fiber/sugar/saturatedFat=grams, sodium/c
     }));
     content.push({ type: "text", text: prompt });
 
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1024,
-        messages: [{ role:"user", content }]
-      })
-    });
-    const data = await resp.json();
+    // Retry up to 3 times on overload errors
+    let data, attempts = 0;
+    while (attempts < 3) {
+      attempts++;
+      if (attempts > 1) {
+        document.getElementById('analyzingText').textContent = `Server busy — retrying (${attempts}/3)...`;
+        await new Promise(r => setTimeout(r, 3000 * attempts));
+      }
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1024,
+          messages: [{ role:"user", content }]
+        })
+      });
+      data = await resp.json();
+      if (data.error && (data.error.type === 'overloaded_error' || data.error.message?.includes('overload'))) {
+        if (attempts < 3) continue;
+      }
+      break;
+    }
     if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
     const text = data.content.map(b=>b.text||'').join('');
     const result = extractJSON(text);
